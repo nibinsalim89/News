@@ -1,0 +1,186 @@
+CREATE TABLE Users (
+    id TEXT NOT NULL PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    email TEXT NOT NULL UNIQUE,
+    role TEXT NOT NULL,
+    fullName TEXT NOT NULL,
+    phoneNumber TEXT,
+    isActive INTEGER NOT NULL DEFAULT 1,
+    createdAt INTEGER NOT NULL,
+    lastLoginAt INTEGER
+);
+
+CREATE TABLE ParkingSlots (
+    id TEXT NOT NULL PRIMARY KEY,
+    slotNumber TEXT NOT NULL UNIQUE,
+    slotType TEXT NOT NULL,
+    status TEXT NOT NULL,
+    occupiedBy TEXT,
+    reservedBy TEXT,
+    reservationExpiresAt INTEGER,
+    floor INTEGER,
+    section TEXT,
+    row TEXT,
+    coordinatesX REAL,
+    coordinatesY REAL,
+    latitude REAL,
+    longitude REAL,
+    qrCode TEXT,
+    nfcTag TEXT,
+    isActive INTEGER NOT NULL DEFAULT 1,
+    lastUpdated INTEGER NOT NULL,
+    FOREIGN KEY (occupiedBy) REFERENCES Users(id),
+    FOREIGN KEY (reservedBy) REFERENCES Users(id)
+);
+
+CREATE TABLE Reservations (
+    id TEXT NOT NULL PRIMARY KEY,
+    userId TEXT NOT NULL,
+    slotId TEXT NOT NULL,
+    status TEXT NOT NULL,
+    createdAt INTEGER NOT NULL,
+    expiresAt INTEGER NOT NULL,
+    activatedAt INTEGER,
+    completedAt INTEGER,
+    vehicleLicensePlate TEXT,
+    vehicleType TEXT,
+    vehicleColor TEXT,
+    vehicleModel TEXT,
+    notes TEXT,
+    FOREIGN KEY (userId) REFERENCES Users(id),
+    FOREIGN KEY (slotId) REFERENCES ParkingSlots(id)
+);
+
+CREATE TABLE ParkingSessions (
+    id TEXT NOT NULL PRIMARY KEY,
+    userId TEXT NOT NULL,
+    slotId TEXT NOT NULL,
+    reservationId TEXT,
+    startTime INTEGER NOT NULL,
+    endTime INTEGER,
+    duration INTEGER,
+    vehicleLicensePlate TEXT,
+    vehicleType TEXT,
+    vehicleColor TEXT,
+    vehicleModel TEXT,
+    checkInMethod TEXT NOT NULL,
+    checkOutMethod TEXT,
+    totalCost REAL,
+    FOREIGN KEY (userId) REFERENCES Users(id),
+    FOREIGN KEY (slotId) REFERENCES ParkingSlots(id),
+    FOREIGN KEY (reservationId) REFERENCES Reservations(id)
+);
+
+CREATE TABLE Notifications (
+    id TEXT NOT NULL PRIMARY KEY,
+    userId TEXT NOT NULL,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    data TEXT NOT NULL DEFAULT '{}',
+    isRead INTEGER NOT NULL DEFAULT 0,
+    createdAt INTEGER NOT NULL,
+    scheduledFor INTEGER,
+    priority TEXT NOT NULL DEFAULT 'NORMAL',
+    FOREIGN KEY (userId) REFERENCES Users(id)
+);
+
+-- User queries
+insertUser:
+INSERT INTO Users (id, username, email, role, fullName, phoneNumber, isActive, createdAt, lastLoginAt)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+getUserById:
+SELECT * FROM Users WHERE id = ?;
+
+getUserByUsername:
+SELECT * FROM Users WHERE username = ?;
+
+getAllUsers:
+SELECT * FROM Users ORDER BY fullName;
+
+updateUserLastLogin:
+UPDATE Users SET lastLoginAt = ? WHERE id = ?;
+
+-- Parking slot queries
+insertParkingSlot:
+INSERT INTO ParkingSlots (id, slotNumber, slotType, status, occupiedBy, reservedBy, reservationExpiresAt, 
+                          floor, section, row, coordinatesX, coordinatesY, latitude, longitude, 
+                          qrCode, nfcTag, isActive, lastUpdated)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+getAllParkingSlots:
+SELECT * FROM ParkingSlots WHERE isActive = 1 ORDER BY slotNumber;
+
+getAvailableSlots:
+SELECT * FROM ParkingSlots 
+WHERE isActive = 1 AND status = 'VACANT' 
+ORDER BY slotNumber;
+
+getSlotsByType:
+SELECT * FROM ParkingSlots 
+WHERE isActive = 1 AND slotType = ? 
+ORDER BY slotNumber;
+
+getParkingSlotById:
+SELECT * FROM ParkingSlots WHERE id = ?;
+
+updateSlotStatus:
+UPDATE ParkingSlots SET status = ?, occupiedBy = ?, reservedBy = ?, reservationExpiresAt = ?, lastUpdated = ?
+WHERE id = ?;
+
+clearExpiredReservations:
+UPDATE ParkingSlots 
+SET status = 'VACANT', reservedBy = NULL, reservationExpiresAt = NULL, lastUpdated = ?
+WHERE reservationExpiresAt < ? AND status = 'RESERVED';
+
+-- Reservation queries
+insertReservation:
+INSERT INTO Reservations (id, userId, slotId, status, createdAt, expiresAt, activatedAt, completedAt,
+                         vehicleLicensePlate, vehicleType, vehicleColor, vehicleModel, notes)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+getReservationById:
+SELECT * FROM Reservations WHERE id = ?;
+
+getUserReservations:
+SELECT * FROM Reservations WHERE userId = ? ORDER BY createdAt DESC;
+
+getActiveReservations:
+SELECT * FROM Reservations WHERE status = 'ACTIVE' OR status = 'PENDING';
+
+updateReservationStatus:
+UPDATE Reservations SET status = ?, activatedAt = ?, completedAt = ? WHERE id = ?;
+
+getExpiredReservations:
+SELECT * FROM Reservations WHERE expiresAt < ? AND (status = 'PENDING' OR status = 'ACTIVE');
+
+-- Parking session queries
+insertParkingSession:
+INSERT INTO ParkingSessions (id, userId, slotId, reservationId, startTime, endTime, duration,
+                            vehicleLicensePlate, vehicleType, vehicleColor, vehicleModel,
+                            checkInMethod, checkOutMethod, totalCost)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+getActiveSessions:
+SELECT * FROM ParkingSessions WHERE endTime IS NULL;
+
+getUserSessions:
+SELECT * FROM ParkingSessions WHERE userId = ? ORDER BY startTime DESC;
+
+updateSessionEnd:
+UPDATE ParkingSessions SET endTime = ?, duration = ?, checkOutMethod = ?, totalCost = ? WHERE id = ?;
+
+-- Notification queries
+insertNotification:
+INSERT INTO Notifications (id, userId, type, title, message, data, isRead, createdAt, scheduledFor, priority)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+getUserNotifications:
+SELECT * FROM Notifications WHERE userId = ? ORDER BY createdAt DESC;
+
+getUnreadNotifications:
+SELECT * FROM Notifications WHERE userId = ? AND isRead = 0 ORDER BY createdAt DESC;
+
+markNotificationAsRead:
+UPDATE Notifications SET isRead = 1 WHERE id = ?;
